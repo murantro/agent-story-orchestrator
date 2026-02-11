@@ -12,13 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-def __getattr__(name: str):
-    if name == "app":
-        from .agent import app
-
-        return app
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-__all__ = ["app"]
+"""Unit test configuration."""

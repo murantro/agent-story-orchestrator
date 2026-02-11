@@ -12,13 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from .emotion_engine import EmotionEngine
+from .intention_engine import ArchetypeWeights, IntentionEngine
 
-def __getattr__(name: str):
-    if name == "app":
-        from .agent import app
-
-        return app
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-__all__ = ["app"]
+__all__ = ["ArchetypeWeights", "EmotionEngine", "IntentionEngine"]

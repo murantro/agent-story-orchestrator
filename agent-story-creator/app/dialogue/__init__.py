@@ -12,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from .template_engine import TemplateEngine
+from .tier_selector import DialogueTier, InteractionContext, select_tier
 
-def __getattr__(name: str):
-    if name == "app":
-        from .agent import app
-
-        return app
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-__all__ = ["app"]
+__all__ = [
+    "DialogueTier",
+    "InteractionContext",
+    "TemplateEngine",
+    "select_tier",
+]

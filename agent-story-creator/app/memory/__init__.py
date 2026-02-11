@@ -12,13 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from .base import MemoryEntry, MemoryStore
+from .in_memory_store import InMemoryStore
 
-def __getattr__(name: str):
-    if name == "app":
-        from .agent import app
-
-        return app
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-__all__ = ["app"]
+__all__ = ["InMemoryStore", "MemoryEntry", "MemoryStore"]
