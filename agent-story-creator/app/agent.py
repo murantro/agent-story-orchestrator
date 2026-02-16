@@ -13,20 +13,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from google.adk.agents import Agent
-from google.adk.apps import App
-from google.adk.models import Gemini
-from google.genai import types
+"""Root agent definition and agent tree assembly.
+
+Agent hierarchy:
+    root_agent (OrchestratorAgent)
+    +-- simulation_pipeline (SequentialAgent)
+    |   +-- event_agent (EventAgent)
+    |   +-- emotion_agent (EmotionAgent)
+    |   +-- intention_agent (IntentionAgent)
+    +-- dialogue_agent (DialogueAgent)
+        +-- llm_dialogue_agent (LlmAgent / Gemini Flash)
+"""
 
 import os
-import google.auth
 
-from app.tools.tools_general import get_current_time, get_weather
-from app.prompts.prompt_general import INSTRUCTION
+import google.auth
+from google.adk.apps import App
+
+from app.agents.dialogue_agent import DialogueAgent
+from app.agents.llm_dialogue_agent import create_llm_dialogue_agent
+from app.agents.orchestrator import OrchestratorAgent, build_simulation_pipeline
 from app.config import (
-    AGENT_NAME,
-    MODEL_NAME,
-    RETRY_ATTEMPTS,
     APP_NAME,
     GOOGLE_CLOUD_LOCATION,
     GOOGLE_GENAI_USE_VERTEXAI,
@@ -37,15 +44,18 @@ os.environ["GOOGLE_CLOUD_PROJECT"] = project_id
 os.environ["GOOGLE_CLOUD_LOCATION"] = GOOGLE_CLOUD_LOCATION
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = GOOGLE_GENAI_USE_VERTEXAI
 
+# Build the agent tree
+simulation_pipeline = build_simulation_pipeline()
+llm_dialogue_agent = create_llm_dialogue_agent()
+dialogue_agent = DialogueAgent(
+    name="dialogue_agent",
+    sub_agents=[llm_dialogue_agent],
+)
 
-root_agent = Agent(
-    name=AGENT_NAME,
-    model=Gemini(
-        model=MODEL_NAME,
-        retry_options=types.HttpRetryOptions(attempts=RETRY_ATTEMPTS),
-    ),
-    instruction=INSTRUCTION,
-    tools=[get_weather, get_current_time],
+root_agent = OrchestratorAgent(
+    name="orchestrator",
+    description="Emergent Narrative Engine orchestrator. Coordinates NPC simulation and dialogue generation.",
+    sub_agents=[simulation_pipeline, dialogue_agent],
 )
 
 app = App(root_agent=root_agent, name=APP_NAME)
