@@ -19,8 +19,10 @@ from fastapi import FastAPI
 from google.adk.cli.fast_api import get_fast_api_app
 from google.cloud import logging as google_cloud_logging
 
+from app.api.game_routes import game_router, set_world
 from app.app_utils.telemetry import setup_telemetry
 from app.app_utils.typing import Feedback
+from app.world.world_state import WorldStateManager
 
 setup_telemetry()
 _, project_id = google.auth.default()
@@ -49,6 +51,11 @@ app: FastAPI = get_fast_api_app(
 )
 app.title = "agent-story-creator"
 app.description = "API for interacting with the Agent agent-story-creator"
+
+# Initialize world state and mount game API
+_world_state = WorldStateManager()
+set_world(_world_state)
+app.include_router(game_router, prefix="/api/game")
 
 
 @app.post("/feedback")

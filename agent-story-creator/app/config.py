@@ -11,3 +11,12 @@ APP_NAME = "story_orchestrator"
 # Environment Configuration
 GOOGLE_CLOUD_LOCATION = "global"
 GOOGLE_GENAI_USE_VERTEXAI = "True"
+
+# World Configuration
+MAX_NPCS = 1000
+DEFAULT_TICK_DELTA_HOURS = 1.0
+INITIAL_GAME_TIME = 0.0
+
+# Simulation
+EMOTION_DECAY_RATE = 0.05
+EVENT_IMPACT_SCALE = 1.0
