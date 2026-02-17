@@ -20,3 +20,11 @@ INITIAL_GAME_TIME = 0.0
 # Simulation
 EMOTION_DECAY_RATE = 0.05
 EVENT_IMPACT_SCALE = 1.0
+
+# Background Tick Configuration
+BACKGROUND_TICK_ENABLED = False  # Disabled by default (pull-based only)
+BACKGROUND_TICK_INTERVAL_SECONDS = 5.0  # Real seconds between auto-ticks
+BACKGROUND_TICK_DELTA_HOURS = 1.0  # In-game hours per auto-tick
+
+# Memory
+MAX_RECENT_MEMORIES = 10

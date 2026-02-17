@@ -12,16 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import os
+from contextlib import asynccontextmanager
 
 import google.auth
 from fastapi import FastAPI
 from google.adk.cli.fast_api import get_fast_api_app
 from google.cloud import logging as google_cloud_logging
 
-from app.api.game_routes import game_router, set_world
+from app.api.game_routes import game_router, set_tick_runner, set_world
 from app.app_utils.telemetry import setup_telemetry
 from app.app_utils.typing import Feedback
+from app.config import (
+    BACKGROUND_TICK_DELTA_HOURS,
+    BACKGROUND_TICK_ENABLED,
+    BACKGROUND_TICK_INTERVAL_SECONDS,
+)
+from app.world.tick_runner import TickRunner
 from app.world.world_state import WorldStateManager
 
 setup_telemetry()
@@ -41,6 +49,34 @@ session_service_uri = None
 
 artifact_service_uri = f"gs://{logs_bucket_name}" if logs_bucket_name else None
 
+# Initialize world state and tick runner
+_world_state = WorldStateManager()
+_tick_runner = TickRunner(
+    _world_state,
+    interval_seconds=BACKGROUND_TICK_INTERVAL_SECONDS,
+    delta_hours=BACKGROUND_TICK_DELTA_HOURS,
+)
+
+_py_logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage world state and background tick runner lifecycle."""
+    set_world(_world_state)
+    set_tick_runner(_tick_runner)
+
+    if BACKGROUND_TICK_ENABLED:
+        await _tick_runner.start()
+        _py_logger.info("Background tick runner started on startup.")
+
+    yield
+
+    if _tick_runner.running:
+        await _tick_runner.stop()
+        _py_logger.info("Background tick runner stopped on shutdown.")
+
+
 app: FastAPI = get_fast_api_app(
     agents_dir=AGENT_DIR,
     web=True,
@@ -48,13 +84,12 @@ app: FastAPI = get_fast_api_app(
     allow_origins=allow_origins,
     session_service_uri=session_service_uri,
     otel_to_cloud=True,
+    lifespan=lifespan,
 )
 app.title = "agent-story-creator"
 app.description = "API for interacting with the Agent agent-story-creator"
 
-# Initialize world state and mount game API
-_world_state = WorldStateManager()
-set_world(_world_state)
+# Mount game API
 app.include_router(game_router, prefix="/api/game")
 
 

@@ -123,6 +123,15 @@ class DialogueResponse(BaseModel):
     npc_id: str
     text: str
     tier: str
+    memories_used: int = 0
+
+
+class TickRunnerStatusResponse(BaseModel):
+    """Response with background tick runner status."""
+
+    running: bool
+    ticks_completed: int
+    interval_seconds: float
 
 
 class GameTimeResponse(BaseModel):

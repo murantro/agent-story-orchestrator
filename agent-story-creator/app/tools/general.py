@@ -16,6 +16,7 @@
 import datetime
 from zoneinfo import ZoneInfo
 
+
 def get_weather(query: str) -> str:
     """Simulates a web search. Use it get information on weather.
 

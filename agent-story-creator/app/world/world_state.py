@@ -25,15 +25,19 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any
 
+import numpy as np
+
 from app.config import (
     DEFAULT_TICK_DELTA_HOURS,
     EMOTION_DECAY_RATE,
     EVENT_IMPACT_SCALE,
     INITIAL_GAME_TIME,
     MAX_NPCS,
+    MAX_RECENT_MEMORIES,
 )
 from app.events.event_queue import EventQueue
 from app.events.propagation import EventPropagator
+from app.memory.base import MemoryEntry
 from app.memory.in_memory_store import InMemoryStore
 from app.models.events import WorldEvent
 from app.models.npc_status import NPCVectorialStatus
@@ -175,6 +179,35 @@ class WorldStateManager:
         """
         return self._event_queue.pop_due(self._game_time)
 
+    # --- Memory ---
+
+    async def form_memory_from_event(
+        self, event: WorldEvent, npc: NPCVectorialStatus
+    ) -> None:
+        """Create a memory entry when an NPC witnesses an event.
+
+        Stores event description and emotional valence in the memory store.
+        Uses a zero embedding (will be replaced by sentence-transformers later).
+
+        Args:
+            event: The world event witnessed.
+            npc: The NPC forming the memory.
+        """
+        if not event.description:
+            return
+        entry = MemoryEntry(
+            npc_id=npc.npc_id,
+            event_text=event.description,
+            importance=event.intensity,
+            emotional_valence=float(np.mean(event.emotion_impact)),
+            game_timestamp=self._game_time,
+            location_id=event.location_id,
+        )
+        await self._memory_store.store(entry)
+        npc.recent_memories.append(event.description)
+        if len(npc.recent_memories) > MAX_RECENT_MEMORIES:
+            npc.recent_memories = npc.recent_memories[-MAX_RECENT_MEMORIES:]
+
     # --- Simulation ---
 
     async def tick(self, delta_hours: float = DEFAULT_TICK_DELTA_HOURS) -> TickResult:
@@ -199,9 +232,11 @@ class WorldStateManager:
             npcs = list(self._npcs.values())
 
             if npcs:
-                # 3. Apply event impacts to emotions
+                # 3. Apply event impacts to emotions + form memories
                 for event in due_events:
                     self._emotion_engine.apply_event_batch(npcs, event)
+                    for npc in npcs:
+                        await self.form_memory_from_event(event, npc)
 
                 # 4. Decay emotions toward baseline
                 self._emotion_engine.tick(npcs)

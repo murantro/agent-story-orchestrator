@@ -20,9 +20,12 @@ simulation ticks, dialogue generation, and world state save/load.
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 from fastapi import APIRouter, HTTPException
 
+from app.config import MAX_RECENT_MEMORIES, MODEL_NAME
 from app.dialogue.template_engine import TemplateEngine
 from app.dialogue.tier_selector import DialogueTier, InteractionContext, select_tier
 from app.models.events import WorldEvent
@@ -32,6 +35,7 @@ from app.models.npc_status import (
     SOCIAL_INFLUENCE_DIM,
     NPCVectorialStatus,
 )
+from app.world.tick_runner import TickRunner
 from app.world.world_state import WorldStateManager
 
 from .schemas import (
@@ -45,11 +49,15 @@ from .schemas import (
     SubmitEventResponse,
     TickRequest,
     TickResponse,
+    TickRunnerStatusResponse,
     WorldSnapshotResponse,
 )
 
+logger = logging.getLogger(__name__)
+
 # Module-level world state singleton (set during app startup)
 _world: WorldStateManager | None = None
+_tick_runner: TickRunner | None = None
 
 
 def get_world() -> WorldStateManager:
@@ -63,10 +71,21 @@ def get_world() -> WorldStateManager:
     return _world
 
 
-def set_world(world: WorldStateManager) -> None:
+def set_world(world: WorldStateManager | None) -> None:
     """Set the world state manager singleton."""
     global _world
     _world = world
+
+
+def get_tick_runner() -> TickRunner | None:
+    """Get the tick runner singleton (may be None)."""
+    return _tick_runner
+
+
+def set_tick_runner(runner: TickRunner | None) -> None:
+    """Set the tick runner singleton."""
+    global _tick_runner
+    _tick_runner = runner
 
 
 game_router = APIRouter(tags=["game"])
@@ -110,6 +129,59 @@ def _npc_to_detail_response(npc: NPCVectorialStatus) -> NPCDetailResponse:
         relationships=dict(npc.relationships),
         recent_memories=list(npc.recent_memories),
     )
+
+
+async def _generate_llm_dialogue(
+    npc: NPCVectorialStatus,
+    player_message: str | None,
+) -> str:
+    """Generate dialogue using Gemini Flash via google.genai.
+
+    Args:
+        npc: The NPC to generate dialogue for.
+        player_message: Optional player message to respond to.
+
+    Returns:
+        Generated dialogue text, or template fallback on error.
+    """
+    from google import genai
+
+    character_sheet = npc.to_character_sheet()
+    prompt_parts = [
+        "You are an NPC dialogue generator for an emergent narrative video game.\n",
+        "Rules:\n"
+        "- Stay strictly in character based on the provided character sheet.\n"
+        "- The dialogue should reflect the NPC's current emotional state "
+        "and dominant drives.\n"
+        "- Keep responses to 1-3 sentences maximum.\n"
+        "- Do not break the fourth wall or reference game mechanics.\n"
+        "- If the NPC has recent memories, weave them naturally.\n"
+        "- Respond with ONLY the dialogue line, no quotes, no stage "
+        "directions.\n\n",
+        f"Character sheet:\n{character_sheet}\n",
+    ]
+    if player_message:
+        prompt_parts.append(
+            f"\nThe player says: {player_message}\nRespond in character:"
+        )
+    else:
+        prompt_parts.append("\nGenerate an ambient line this NPC would say:")
+
+    prompt = "".join(prompt_parts)
+
+    try:
+        client = genai.Client()
+        response = await client.aio.models.generate_content(
+            model=MODEL_NAME,
+            contents=prompt,
+        )
+        text = response.text
+        if text:
+            return text.strip()
+    except Exception:
+        logger.exception("LLM dialogue generation failed for NPC %s", npc.npc_id)
+
+    return _template_engine.generate(npc)
 
 
 # --- NPC Endpoints ---
@@ -224,16 +296,67 @@ def get_time() -> GameTimeResponse:
     return GameTimeResponse(game_time=world.game_time, npc_count=world.npc_count)
 
 
+# --- Tick Runner Endpoints ---
+
+
+@game_router.post("/tick-runner/start")
+async def start_tick_runner() -> TickRunnerStatusResponse:
+    """Start the background tick runner."""
+    runner = get_tick_runner()
+    if runner is None:
+        raise HTTPException(status_code=503, detail="Tick runner not configured.")
+    if runner.running:
+        raise HTTPException(status_code=409, detail="Tick runner already running.")
+    await runner.start()
+    return TickRunnerStatusResponse(
+        running=runner.running,
+        ticks_completed=runner.ticks_completed,
+        interval_seconds=runner.interval_seconds,
+    )
+
+
+@game_router.post("/tick-runner/stop")
+async def stop_tick_runner() -> TickRunnerStatusResponse:
+    """Stop the background tick runner."""
+    runner = get_tick_runner()
+    if runner is None:
+        raise HTTPException(status_code=503, detail="Tick runner not configured.")
+    await runner.stop()
+    return TickRunnerStatusResponse(
+        running=runner.running,
+        ticks_completed=runner.ticks_completed,
+        interval_seconds=runner.interval_seconds,
+    )
+
+
+@game_router.get("/tick-runner/status", response_model=TickRunnerStatusResponse)
+def tick_runner_status() -> TickRunnerStatusResponse:
+    """Get tick runner status."""
+    runner = get_tick_runner()
+    if runner is None:
+        return TickRunnerStatusResponse(
+            running=False,
+            ticks_completed=0,
+            interval_seconds=0.0,
+        )
+    return TickRunnerStatusResponse(
+        running=runner.running,
+        ticks_completed=runner.ticks_completed,
+        interval_seconds=runner.interval_seconds,
+    )
+
+
 # --- Dialogue Endpoints ---
 
 
 @game_router.post("/dialogue", response_model=DialogueResponse)
-def generate_dialogue(req: DialogueRequest) -> DialogueResponse:
+async def generate_dialogue(req: DialogueRequest) -> DialogueResponse:
     """Generate dialogue for an NPC.
 
-    For TEMPLATE tier, generates immediately. For LLM tiers,
-    returns the template dialogue as a fallback (LLM integration
-    requires the full ADK pipeline).
+    TEMPLATE tier: immediate template generation ($0).
+    CLOUD_LLM tier: Gemini Flash via google.genai with character sheet
+    and recent memories as context.
+    Falls back to template on LLM errors.
     """
     world = get_world()
     npc = world.get_npc(req.npc_id)
@@ -247,15 +370,19 @@ def generate_dialogue(req: DialogueRequest) -> DialogueResponse:
         local_llm_available=False,
     )
     tier = select_tier(npc, context)
+    memories_used = len(npc.recent_memories[:MAX_RECENT_MEMORIES])
 
     if tier == DialogueTier.TEMPLATE:
         text = _template_engine.generate(npc)
     else:
-        # For LLM tiers, generate template as fallback
-        # Full LLM dialogue requires the ADK agent pipeline
-        text = _template_engine.generate(npc)
+        text = await _generate_llm_dialogue(npc, req.player_message)
 
-    return DialogueResponse(npc_id=npc.npc_id, text=text, tier=tier.value)
+    return DialogueResponse(
+        npc_id=npc.npc_id,
+        text=text,
+        tier=tier.value,
+        memories_used=memories_used,
+    )
 
 
 # --- World State Endpoints ---

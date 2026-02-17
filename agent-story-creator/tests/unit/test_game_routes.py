@@ -20,19 +20,23 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api.game_routes import game_router, set_world
+from app.api.game_routes import game_router, set_tick_runner, set_world
+from app.world.tick_runner import TickRunner
 from app.world.world_state import WorldStateManager
 
 
 @pytest.fixture()
 def client():
-    """Create a test client with a fresh WorldStateManager."""
+    """Create a test client with a fresh WorldStateManager and TickRunner."""
     app = FastAPI()
     app.include_router(game_router, prefix="/api/game")
     world = WorldStateManager()
+    runner = TickRunner(world)
     set_world(world)
+    set_tick_runner(runner)
     yield TestClient(app)
     set_world(None)
+    set_tick_runner(None)
 
 
 class TestNPCEndpoints:
@@ -162,6 +166,7 @@ class TestDialogueEndpoints:
         data = resp.json()
         assert data["tier"] == "template"
         assert data["text"]
+        assert data["memories_used"] == 0
 
     def test_dialogue_npc_not_found(self, client):
         resp = client.post(
@@ -169,6 +174,61 @@ class TestDialogueEndpoints:
             json={"npc_id": "missing", "player_initiated": False},
         )
         assert resp.status_code == 404
+
+    def test_dialogue_response_includes_memories_used(self, client):
+        """Dialogue response includes memories_used field."""
+        create_resp = client.post("/api/game/npc", json={"name": "Sage"})
+        npc_id = create_resp.json()["npc_id"]
+
+        resp = client.post(
+            "/api/game/dialogue",
+            json={"npc_id": npc_id, "player_initiated": False},
+        )
+        data = resp.json()
+        assert "memories_used" in data
+        assert isinstance(data["memories_used"], int)
+
+
+class TestTickRunnerEndpoints:
+    def test_tick_runner_status_default(self, client):
+        resp = client.get("/api/game/tick-runner/status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["running"] is False
+        assert data["ticks_completed"] == 0
+
+    def test_tick_runner_start_stop(self, client):
+        resp = client.post("/api/game/tick-runner/start")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["running"] is True
+
+        resp = client.post("/api/game/tick-runner/stop")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["running"] is False
+
+    def test_tick_runner_double_start(self, client):
+        client.post("/api/game/tick-runner/start")
+        resp = client.post("/api/game/tick-runner/start")
+        assert resp.status_code == 409
+
+        # Clean up
+        client.post("/api/game/tick-runner/stop")
+
+    def test_tick_runner_status_not_configured(self, client):
+        """Status endpoint returns defaults when no runner configured."""
+        set_tick_runner(None)
+        resp = client.get("/api/game/tick-runner/status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["running"] is False
+
+    def test_tick_runner_start_not_configured(self, client):
+        """Start fails gracefully when no runner configured."""
+        set_tick_runner(None)
+        resp = client.post("/api/game/tick-runner/start")
+        assert resp.status_code == 503
 
 
 class TestWorldStateEndpoints:
