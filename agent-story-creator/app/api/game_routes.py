@@ -39,10 +39,13 @@ from app.world.tick_runner import TickRunner
 from app.world.world_state import WorldStateManager
 
 from .schemas import (
+    AddEdgeRequest,
+    CreateLocationRequest,
     CreateNPCRequest,
     DialogueRequest,
     DialogueResponse,
     GameTimeResponse,
+    LocationResponse,
     NPCDetailResponse,
     NPCResponse,
     SubmitEventRequest,
@@ -287,6 +290,7 @@ async def tick(req: TickRequest) -> TickResponse:
         events_delivered=result.events_delivered,
         events_pending=result.events_pending,
         interactions_resolved=result.interactions_resolved,
+        npcs_moved=result.npcs_moved,
     )
 
 
@@ -394,12 +398,133 @@ def get_snapshot() -> WorldSnapshotResponse:
     """Get a full snapshot of the world state for saving."""
     world = get_world()
     data = world.snapshot()
-    return WorldSnapshotResponse(game_time=data["game_time"], npcs=data["npcs"])
+    return WorldSnapshotResponse(
+        game_time=data["game_time"],
+        npcs=data["npcs"],
+        locations=data.get("locations", {}),
+    )
 
 
 @game_router.post("/world/restore")
 def restore_snapshot(data: WorldSnapshotResponse) -> dict[str, str]:
     """Restore world state from a snapshot."""
     world = get_world()
-    world.restore({"game_time": data.game_time, "npcs": data.npcs})
+    world.restore(
+        {
+            "game_time": data.game_time,
+            "npcs": data.npcs,
+            "locations": data.locations,
+        }
+    )
     return {"status": "restored", "npc_count": str(world.npc_count)}
+
+
+# --- Location Endpoints ---
+
+
+@game_router.post("/location", response_model=LocationResponse, status_code=201)
+def create_location(req: CreateLocationRequest) -> LocationResponse:
+    """Create a new location in the world graph."""
+    from app.models.locations import ENVIRONMENT_DIM, Location
+
+    world = get_world()
+    if req.environment is not None:
+        if len(req.environment) != ENVIRONMENT_DIM:
+            raise HTTPException(
+                status_code=400,
+                detail=f"environment must have {ENVIRONMENT_DIM} dimensions.",
+            )
+        loc = Location(
+            location_id=req.location_id,
+            name=req.name,
+            location_type=req.location_type,
+            environment=np.array(req.environment, dtype=np.float32),
+            capacity=req.capacity,
+        )
+    else:
+        loc = Location.from_type(
+            req.location_id, req.name, req.location_type, req.capacity
+        )
+
+    try:
+        world.location_graph.add_location(loc)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+    npc_count = len(world.list_npcs(location_id=req.location_id))
+    return LocationResponse(
+        location_id=loc.location_id,
+        name=loc.name,
+        location_type=loc.location_type,
+        environment=loc.environment.tolist(),
+        capacity=loc.capacity,
+        npc_count=npc_count,
+    )
+
+
+@game_router.get("/location/{location_id}", response_model=LocationResponse)
+def get_location(location_id: str) -> LocationResponse:
+    """Get a location by ID."""
+    world = get_world()
+    loc = world.location_graph.get_location(location_id)
+    if loc is None:
+        raise HTTPException(
+            status_code=404, detail=f"Location {location_id!r} not found."
+        )
+    npc_count = len(world.list_npcs(location_id=location_id))
+    return LocationResponse(
+        location_id=loc.location_id,
+        name=loc.name,
+        location_type=loc.location_type,
+        environment=loc.environment.tolist(),
+        capacity=loc.capacity,
+        npc_count=npc_count,
+    )
+
+
+@game_router.get("/locations", response_model=list[LocationResponse])
+def list_locations() -> list[LocationResponse]:
+    """List all locations in the world graph."""
+    world = get_world()
+    result = []
+    for loc in world.location_graph.list_locations():
+        npc_count = len(world.list_npcs(location_id=loc.location_id))
+        result.append(
+            LocationResponse(
+                location_id=loc.location_id,
+                name=loc.name,
+                location_type=loc.location_type,
+                environment=loc.environment.tolist(),
+                capacity=loc.capacity,
+                npc_count=npc_count,
+            )
+        )
+    return result
+
+
+@game_router.delete("/location/{location_id}")
+def delete_location(location_id: str) -> dict[str, str]:
+    """Remove a location from the world graph."""
+    world = get_world()
+    if not world.location_graph.remove_location(location_id):
+        raise HTTPException(
+            status_code=404, detail=f"Location {location_id!r} not found."
+        )
+    return {"status": "deleted", "location_id": location_id}
+
+
+@game_router.post("/location/edge", status_code=201)
+def add_edge(req: AddEdgeRequest) -> dict[str, str]:
+    """Add a path between two locations."""
+    world = get_world()
+    try:
+        world.location_graph.add_edge(
+            req.from_id,
+            req.to_id,
+            travel_hours=req.travel_hours,
+            danger=req.danger,
+            bidirectional=req.bidirectional,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {"status": "created", "from": req.from_id, "to": req.to_id}

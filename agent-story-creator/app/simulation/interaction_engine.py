@@ -88,30 +88,22 @@ _EMOTION_TEMPLATES: dict[str, np.ndarray] = {
     "friendly_chat": np.array(
         [0.15, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.0], dtype=np.float32
     ),
-    "bonding": np.array(
-        [0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.15, 0.0], dtype=np.float32
-    ),
+    "bonding": np.array([0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.15, 0.0], dtype=np.float32),
     "intimidation": np.array(
         [0.0, 0.0, 0.15, 0.2, 0.0, 0.0, -0.1, 0.0], dtype=np.float32
     ),
     "conflict": np.array(
         [0.0, 0.0, 0.25, 0.15, 0.0, 0.0, -0.15, 0.0], dtype=np.float32
     ),
-    "competition": np.array(
-        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2], dtype=np.float32
-    ),
-    "aid": np.array(
-        [0.15, 0.0, 0.0, -0.1, 0.0, 0.0, 0.2, 0.0], dtype=np.float32
-    ),
+    "competition": np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2], dtype=np.float32),
+    "aid": np.array([0.15, 0.0, 0.0, -0.1, 0.0, 0.0, 0.2, 0.0], dtype=np.float32),
     "shared_discovery": np.array(
         [0.0, 0.0, 0.0, 0.0, 0.15, 0.0, 0.0, 0.15], dtype=np.float32
     ),
     "collaboration": np.array(
         [0.15, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1, 0.15], dtype=np.float32
     ),
-    "mentorship": np.array(
-        [0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.15, 0.1], dtype=np.float32
-    ),
+    "mentorship": np.array([0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.15, 0.1], dtype=np.float32),
     "casual_encounter": np.array(
         [0.02, 0.0, 0.0, 0.0, 0.0, 0.0, 0.02, 0.0], dtype=np.float32
     ),
@@ -180,9 +172,7 @@ class InteractionEngine:
     interaction_rate: float = INTERACTION_RATE
     max_per_location: int = MAX_INTERACTIONS_PER_LOCATION
     min_energy: float = MIN_ENERGY_FOR_INTERACTION
-    _rng: np.random.Generator = field(
-        default_factory=lambda: np.random.default_rng()
-    )
+    _rng: np.random.Generator = field(default_factory=lambda: np.random.default_rng())
 
     def resolve_interaction_type(
         self,

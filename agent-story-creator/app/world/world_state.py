@@ -40,10 +40,13 @@ from app.events.propagation import EventPropagator
 from app.memory.base import MemoryEntry
 from app.memory.in_memory_store import InMemoryStore
 from app.models.events import WorldEvent
+from app.models.locations import LocationGraph
 from app.models.npc_status import NPCVectorialStatus
 from app.simulation.emotion_engine import EmotionEngine
+from app.simulation.environment_engine import EnvironmentEngine
 from app.simulation.intention_engine import IntentionEngine
 from app.simulation.interaction_engine import InteractionEngine
+from app.simulation.movement_engine import MovementEngine
 from app.simulation.relationship_engine import RelationshipEngine
 
 
@@ -63,6 +66,7 @@ class TickResult:
     events_delivered: int = 0
     events_pending: int = 0
     interactions_resolved: int = 0
+    npcs_moved: int = 0
 
 
 class WorldStateManager:
@@ -95,6 +99,9 @@ class WorldStateManager:
         self._intention_engine = IntentionEngine()
         self._interaction_engine = InteractionEngine()
         self._relationship_engine = RelationshipEngine()
+        self._environment_engine = EnvironmentEngine()
+        self._movement_engine = MovementEngine()
+        self._location_graph = LocationGraph()
         self._game_time = game_time
         self._max_npcs = max_npcs
         self._lock = asyncio.Lock()
@@ -110,6 +117,10 @@ class WorldStateManager:
     @property
     def memory_store(self) -> InMemoryStore:
         return self._memory_store
+
+    @property
+    def location_graph(self) -> LocationGraph:
+        return self._location_graph
 
     # --- NPC CRUD ---
 
@@ -226,6 +237,9 @@ class WorldStateManager:
           5. Recompute intentions
           6. Resolve autonomous NPC interactions
           7. Apply relationship updates + submit interaction events
+          8. Decay weak relationships
+          9. Process NPC movement (arrivals + new departures)
+          10. Update NPC environment vectors from locations
 
         Args:
             delta_hours: In-game hours to advance.
@@ -243,6 +257,7 @@ class WorldStateManager:
             npcs = list(self._npcs.values())
 
             interactions_resolved = 0
+            npcs_moved = 0
 
             if npcs:
                 # 3. Apply event impacts to emotions + form memories
@@ -278,12 +293,22 @@ class WorldStateManager:
                 # 8. Decay weak relationships
                 self._relationship_engine.decay(npcs)
 
+                # 9. Process NPC movement (arrivals + new departures)
+                new_journeys = self._movement_engine.tick(
+                    npcs, self._location_graph, self._game_time
+                )
+                npcs_moved = len(new_journeys)
+
+                # 10. Update NPC environment vectors from locations
+                self._environment_engine.tick(npcs, self._location_graph)
+
             return TickResult(
                 game_time=self._game_time,
                 npcs_updated=len(npcs),
                 events_delivered=len(due_events),
                 events_pending=len(self._event_queue),
                 interactions_resolved=interactions_resolved,
+                npcs_moved=npcs_moved,
             )
 
     # --- Serialization ---
@@ -299,6 +324,7 @@ class WorldStateManager:
         return {
             "game_time": self._game_time,
             "npcs": {npc_id: serialize_npc(npc) for npc_id, npc in self._npcs.items()},
+            "locations": self._location_graph.to_dict(),
         }
 
     def restore(self, data: dict[str, Any]) -> None:
@@ -315,3 +341,5 @@ class WorldStateManager:
             self._npcs[npc_id] = deserialize_npc(npc_data)
         self._event_queue = EventQueue()
         self._propagator = EventPropagator(self._event_queue)
+        if "locations" in data:
+            self._location_graph = LocationGraph.from_dict(data["locations"])

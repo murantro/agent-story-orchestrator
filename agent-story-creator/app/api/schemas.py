@@ -106,6 +106,7 @@ class TickResponse(BaseModel):
     events_delivered: int
     events_pending: int
     interactions_resolved: int = 0
+    npcs_moved: int = 0
 
 
 class DialogueRequest(BaseModel):
@@ -142,8 +143,47 @@ class GameTimeResponse(BaseModel):
     npc_count: int
 
 
+class CreateLocationRequest(BaseModel):
+    """Request to create a new location."""
+
+    location_id: str
+    name: str
+    location_type: str = "generic"
+    environment: list[float] | None = Field(
+        default=None,
+        description="4-dim environment vector. If None, uses type defaults.",
+    )
+    capacity: int = Field(
+        default=0,
+        ge=0,
+        description="Max NPCs (0 = unlimited).",
+    )
+
+
+class LocationResponse(BaseModel):
+    """Response with location data."""
+
+    location_id: str
+    name: str
+    location_type: str
+    environment: list[float]
+    capacity: int
+    npc_count: int = 0
+
+
+class AddEdgeRequest(BaseModel):
+    """Request to add a path between two locations."""
+
+    from_id: str
+    to_id: str
+    travel_hours: float = Field(default=1.0, gt=0.0)
+    danger: float = Field(default=0.0, ge=0.0, le=1.0)
+    bidirectional: bool = True
+
+
 class WorldSnapshotResponse(BaseModel):
     """Full world state snapshot for save/load."""
 
     game_time: float
     npcs: dict
+    locations: dict = Field(default_factory=dict)

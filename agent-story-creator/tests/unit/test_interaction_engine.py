@@ -133,9 +133,7 @@ def test_tick_only_pairs_same_location():
 
 def test_tick_respects_max_per_location():
     """Should not exceed max_per_location interactions."""
-    engine = InteractionEngine(
-        interaction_rate=100.0, max_per_location=2
-    )
+    engine = InteractionEngine(interaction_rate=100.0, max_per_location=2)
     npcs = [
         _make_npc(f"NPC_{i}", location_id="plaza", dominant_intention_idx=1)
         for i in range(10)
