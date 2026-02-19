@@ -14,5 +14,6 @@
 
 from .emotion_engine import EmotionEngine
 from .intention_engine import ArchetypeWeights, IntentionEngine
+from .vitality_engine import VitalityEngine
 
-__all__ = ["ArchetypeWeights", "EmotionEngine", "IntentionEngine"]
+__all__ = ["ArchetypeWeights", "EmotionEngine", "IntentionEngine", "VitalityEngine"]

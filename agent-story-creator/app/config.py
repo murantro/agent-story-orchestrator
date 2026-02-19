@@ -37,3 +37,17 @@ MIN_ENERGY_FOR_INTERACTION = 0.1  # NPCs below this energy won't interact
 # Relationship Engine
 RELATIONSHIP_DECAY_RATE = 0.01  # Weak ties fade toward zero per tick
 RELATIONSHIP_DELTA_SCALE = 1.0  # Global multiplier for relationship changes
+
+# Vitality Engine (Energy & Health dynamics)
+ENERGY_DRAIN_PER_TICK = 0.01  # Passive energy expenditure per tick
+ENERGY_REGEN_BASE = 0.03  # Base energy recovery per tick (scaled by environment)
+HEALTH_REGEN_RATE = 0.005  # Passive health recovery per tick (scaled by safety)
+DANGER_HEALTH_DRAIN = 0.02  # Health drain per tick in unsafe environments
+DANGER_SAFETY_THRESHOLD = 0.3  # Safety below this causes health drain
+HEALTH_ENERGY_CAP_THRESHOLD = 0.5  # Below this health, energy is capped
+COLLAPSE_ENERGY_THRESHOLD = 0.0  # At this energy, NPC collapses
+DEATH_HEALTH_THRESHOLD = 0.0  # At this health, NPC is incapacitated
+INTERACTION_ENERGY_COST = 0.01  # Base energy cost per interaction
+CONFLICT_ENERGY_COST = 0.03  # Energy cost for conflict interactions
+CONFLICT_HEALTH_DAMAGE = 0.08  # Health damage from conflict interactions
+INTIMIDATION_HEALTH_DAMAGE = 0.03  # Health damage from intimidation

@@ -38,10 +38,24 @@ from app.models.npc_status import (
     EMOTION_DIM,
     ENVIRONMENT_DIM,
     INTENTION_DIM,
+    INTENTION_LABELS,
     PERSONALITY_DIM,
     SOCIAL_INFLUENCE_DIM,
     NPCVectorialStatus,
 )
+
+# Intention indices for vitality bias.
+_IDX_SURVIVE = INTENTION_LABELS.index("survive")
+_IDX_ESCAPE = INTENTION_LABELS.index("escape")
+
+# Thresholds below which vitality biases kick in.
+_LOW_ENERGY_THRESHOLD = 0.3
+_LOW_HEALTH_THRESHOLD = 0.4
+
+# Strength of the vitality bias on intention computation.
+_ENERGY_SURVIVE_BIAS = 0.5
+_HEALTH_SURVIVE_BIAS = 0.8
+_HEALTH_ESCAPE_BIAS = 0.3
 
 
 def _random_mapping(input_dim: int, output_dim: int) -> np.ndarray:
@@ -108,6 +122,9 @@ class IntentionEngine:
     def compute(self, npc: NPCVectorialStatus) -> np.ndarray:
         """Compute a new intention vector for a single NPC.
 
+        Includes vitality bias: low energy boosts "survive", low health
+        strongly boosts "survive" and "escape".
+
         Args:
             npc: The NPC whose intention to recompute.
 
@@ -123,6 +140,17 @@ class IntentionEngine:
             + w.w_environment * (w.m_environment @ npc.environment)
             + w.w_momentum * npc.intention
         )
+
+        # Vitality bias: low energy/health shifts intentions toward survival
+        if npc.energy < _LOW_ENERGY_THRESHOLD:
+            deficit = (_LOW_ENERGY_THRESHOLD - npc.energy) / _LOW_ENERGY_THRESHOLD
+            raw[_IDX_SURVIVE] += _ENERGY_SURVIVE_BIAS * deficit
+
+        if npc.health < _LOW_HEALTH_THRESHOLD:
+            deficit = (_LOW_HEALTH_THRESHOLD - npc.health) / _LOW_HEALTH_THRESHOLD
+            raw[_IDX_SURVIVE] += _HEALTH_SURVIVE_BIAS * deficit
+            raw[_IDX_ESCAPE] += _HEALTH_ESCAPE_BIAS * deficit
+
         return _normalize(raw)
 
     def compute_batch(self, npcs: list[NPCVectorialStatus]) -> list[np.ndarray]:

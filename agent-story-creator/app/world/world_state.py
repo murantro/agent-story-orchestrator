@@ -48,6 +48,7 @@ from app.simulation.intention_engine import IntentionEngine
 from app.simulation.interaction_engine import InteractionEngine
 from app.simulation.movement_engine import MovementEngine
 from app.simulation.relationship_engine import RelationshipEngine
+from app.simulation.vitality_engine import VitalityEngine
 
 
 @dataclass
@@ -101,6 +102,7 @@ class WorldStateManager:
         self._relationship_engine = RelationshipEngine()
         self._environment_engine = EnvironmentEngine()
         self._movement_engine = MovementEngine()
+        self._vitality_engine = VitalityEngine()
         self._location_graph = LocationGraph()
         self._game_time = game_time
         self._max_npcs = max_npcs
@@ -232,14 +234,15 @@ class WorldStateManager:
         Runs the full pipeline:
           1. Advance clock
           2. Deliver due events
-          3. Apply event impacts to emotions + form memories
+          3. Apply event impacts to emotions, health/energy + form memories
           4. Decay emotions toward baseline
-          5. Recompute intentions
+          5. Recompute intentions (biased by energy/health)
           6. Resolve autonomous NPC interactions
-          7. Apply relationship updates + submit interaction events
+          7. Apply relationship updates, vitality costs + submit interaction events
           8. Decay weak relationships
           9. Process NPC movement (arrivals + new departures)
           10. Update NPC environment vectors from locations
+          11. Apply per-tick vitality dynamics (energy drain/regen, health)
 
         Args:
             delta_hours: In-game hours to advance.
@@ -260,29 +263,38 @@ class WorldStateManager:
             npcs_moved = 0
 
             if npcs:
-                # 3. Apply event impacts to emotions + form memories
+                # 3. Apply event impacts to emotions, health/energy + form memories
                 for event in due_events:
                     self._emotion_engine.apply_event_batch(npcs, event)
+                    self._vitality_engine.apply_event_batch(npcs, event)
                     for npc in npcs:
                         await self.form_memory_from_event(event, npc)
 
                 # 4. Decay emotions toward baseline
                 self._emotion_engine.tick(npcs)
 
-                # 5. Recompute intentions
+                # 5. Recompute intentions (now biased by energy/health)
                 self._intention_engine.tick(npcs)
 
                 # 6. Resolve autonomous NPC interactions
                 outcomes = self._interaction_engine.tick(npcs, self._game_time)
                 interactions_resolved = len(outcomes)
 
-                # 7. Apply relationship deltas + submit interaction events
+                # 7. Apply relationship deltas, vitality costs + submit events
                 for outcome in outcomes:
                     npc_a = self._npcs.get(outcome.npc_a_id)
                     npc_b = self._npcs.get(outcome.npc_b_id)
                     if npc_a and npc_b:
                         self._relationship_engine.apply_delta(
                             npc_a, npc_b, outcome.relationship_delta
+                        )
+                        # Apply energy and health costs from interaction
+                        self._vitality_engine.apply_interaction_costs(
+                            npc_a,
+                            npc_b,
+                            outcome.energy_cost,
+                            outcome.health_delta_a,
+                            outcome.health_delta_b,
                         )
                         # Form memories for both participants
                         await self.form_memory_from_event(outcome.event, npc_a)
@@ -301,6 +313,9 @@ class WorldStateManager:
 
                 # 10. Update NPC environment vectors from locations
                 self._environment_engine.tick(npcs, self._location_graph)
+
+                # 11. Apply per-tick vitality dynamics (drain, regen, health)
+                self._vitality_engine.tick(npcs)
 
             return TickResult(
                 game_time=self._game_time,
