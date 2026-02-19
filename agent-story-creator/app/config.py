@@ -28,3 +28,12 @@ BACKGROUND_TICK_DELTA_HOURS = 1.0  # In-game hours per auto-tick
 
 # Memory
 MAX_RECENT_MEMORIES = 10
+
+# Interaction Engine
+INTERACTION_RATE = 0.3  # Base probability multiplier for NPC-NPC interactions
+MAX_INTERACTIONS_PER_LOCATION = 10  # Cap interactions per location per tick
+MIN_ENERGY_FOR_INTERACTION = 0.1  # NPCs below this energy won't interact
+
+# Relationship Engine
+RELATIONSHIP_DECAY_RATE = 0.01  # Weak ties fade toward zero per tick
+RELATIONSHIP_DELTA_SCALE = 1.0  # Global multiplier for relationship changes

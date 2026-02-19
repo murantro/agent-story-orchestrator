@@ -105,6 +105,7 @@ class TickResponse(BaseModel):
     npcs_updated: int
     events_delivered: int
     events_pending: int
+    interactions_resolved: int = 0
 
 
 class DialogueRequest(BaseModel):

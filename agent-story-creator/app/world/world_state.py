@@ -43,6 +43,8 @@ from app.models.events import WorldEvent
 from app.models.npc_status import NPCVectorialStatus
 from app.simulation.emotion_engine import EmotionEngine
 from app.simulation.intention_engine import IntentionEngine
+from app.simulation.interaction_engine import InteractionEngine
+from app.simulation.relationship_engine import RelationshipEngine
 
 
 @dataclass
@@ -60,6 +62,7 @@ class TickResult:
     npcs_updated: int = 0
     events_delivered: int = 0
     events_pending: int = 0
+    interactions_resolved: int = 0
 
 
 class WorldStateManager:
@@ -90,6 +93,8 @@ class WorldStateManager:
             decay_rate=decay_rate, impact_scale=impact_scale
         )
         self._intention_engine = IntentionEngine()
+        self._interaction_engine = InteractionEngine()
+        self._relationship_engine = RelationshipEngine()
         self._game_time = game_time
         self._max_npcs = max_npcs
         self._lock = asyncio.Lock()
@@ -213,8 +218,14 @@ class WorldStateManager:
     async def tick(self, delta_hours: float = DEFAULT_TICK_DELTA_HOURS) -> TickResult:
         """Advance the simulation by delta_hours.
 
-        Runs the full pipeline: advance clock -> deliver events ->
-        apply emotion impacts -> decay emotions -> recompute intentions.
+        Runs the full pipeline:
+          1. Advance clock
+          2. Deliver due events
+          3. Apply event impacts to emotions + form memories
+          4. Decay emotions toward baseline
+          5. Recompute intentions
+          6. Resolve autonomous NPC interactions
+          7. Apply relationship updates + submit interaction events
 
         Args:
             delta_hours: In-game hours to advance.
@@ -231,6 +242,8 @@ class WorldStateManager:
             # 2. Get all NPCs as a list for batch processing
             npcs = list(self._npcs.values())
 
+            interactions_resolved = 0
+
             if npcs:
                 # 3. Apply event impacts to emotions + form memories
                 for event in due_events:
@@ -244,11 +257,33 @@ class WorldStateManager:
                 # 5. Recompute intentions
                 self._intention_engine.tick(npcs)
 
+                # 6. Resolve autonomous NPC interactions
+                outcomes = self._interaction_engine.tick(npcs, self._game_time)
+                interactions_resolved = len(outcomes)
+
+                # 7. Apply relationship deltas + submit interaction events
+                for outcome in outcomes:
+                    npc_a = self._npcs.get(outcome.npc_a_id)
+                    npc_b = self._npcs.get(outcome.npc_b_id)
+                    if npc_a and npc_b:
+                        self._relationship_engine.apply_delta(
+                            npc_a, npc_b, outcome.relationship_delta
+                        )
+                        # Form memories for both participants
+                        await self.form_memory_from_event(outcome.event, npc_a)
+                        await self.form_memory_from_event(outcome.event, npc_b)
+                    # Submit event for propagation
+                    self.submit_event(outcome.event)
+
+                # 8. Decay weak relationships
+                self._relationship_engine.decay(npcs)
+
             return TickResult(
                 game_time=self._game_time,
                 npcs_updated=len(npcs),
                 events_delivered=len(due_events),
                 events_pending=len(self._event_queue),
+                interactions_resolved=interactions_resolved,
             )
 
     # --- Serialization ---

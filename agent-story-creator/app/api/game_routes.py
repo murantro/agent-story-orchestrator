@@ -286,6 +286,7 @@ async def tick(req: TickRequest) -> TickResponse:
         npcs_updated=result.npcs_updated,
         events_delivered=result.events_delivered,
         events_pending=result.events_pending,
+        interactions_resolved=result.interactions_resolved,
     )
 
 
