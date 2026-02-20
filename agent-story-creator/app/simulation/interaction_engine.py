@@ -154,6 +154,20 @@ _HEALTH_IMPACTS: dict[str, tuple[float, float]] = {
     "aid": (0.0, 0.05),  # Aid heals the recipient slightly
 }
 
+# Social impact per interaction type (applied to the event's social_impact).
+# Dims: cultural_conformity, economic_pressure, fashion_awareness,
+#        status_seeking, religious_devotion, political_alignment
+_SOCIAL_IMPACT_TEMPLATES: dict[str, np.ndarray] = {
+    "friendly_chat": np.array([0.05, 0.0, 0.02, 0.0, 0.0, 0.0], dtype=np.float32),
+    "bonding": np.array([0.08, 0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32),
+    "intimidation": np.array([0.0, 0.0, 0.0, 0.1, 0.0, 0.05], dtype=np.float32),
+    "conflict": np.array([0.0, 0.0, 0.0, 0.05, 0.0, 0.08], dtype=np.float32),
+    "competition": np.array([0.0, 0.1, 0.0, 0.08, 0.0, 0.0], dtype=np.float32),
+    "aid": np.array([0.05, 0.0, 0.0, 0.0, 0.05, 0.0], dtype=np.float32),
+    "collaboration": np.array([0.05, 0.05, 0.05, 0.0, 0.0, 0.0], dtype=np.float32),
+    "mentorship": np.array([0.05, 0.0, 0.0, 0.05, 0.0, 0.0], dtype=np.float32),
+}
+
 _DESCRIPTION_TEMPLATES: dict[str, str] = {
     "friendly_chat": "{a} and {b} had a friendly conversation",
     "bonding": "{a} and {b} shared a bonding moment",
@@ -304,7 +318,9 @@ class InteractionEngine:
             timestamp=game_time,
             intensity=0.3,
             emotion_impact=emotion_impact,
-            social_impact=np.zeros(SOCIAL_INFLUENCE_DIM, dtype=np.float32),
+            social_impact=_SOCIAL_IMPACT_TEMPLATES.get(
+                itype, np.zeros(SOCIAL_INFLUENCE_DIM, dtype=np.float32)
+            ).copy(),
         )
 
         energy_cost = _ENERGY_COSTS.get(itype, INTERACTION_ENERGY_COST)

@@ -48,6 +48,7 @@ from app.simulation.intention_engine import IntentionEngine
 from app.simulation.interaction_engine import InteractionEngine
 from app.simulation.movement_engine import MovementEngine
 from app.simulation.relationship_engine import RelationshipEngine
+from app.simulation.social_engine import SocialInfluenceEngine
 from app.simulation.vitality_engine import VitalityEngine
 
 
@@ -103,6 +104,7 @@ class WorldStateManager:
         self._environment_engine = EnvironmentEngine()
         self._movement_engine = MovementEngine()
         self._vitality_engine = VitalityEngine()
+        self._social_engine = SocialInfluenceEngine()
         self._location_graph = LocationGraph()
         self._game_time = game_time
         self._max_npcs = max_npcs
@@ -234,7 +236,7 @@ class WorldStateManager:
         Runs the full pipeline:
           1. Advance clock
           2. Deliver due events
-          3. Apply event impacts to emotions, health/energy + form memories
+          3. Apply event impacts to emotions, health/energy, social + memories
           4. Decay emotions toward baseline
           5. Recompute intentions (biased by energy/health)
           6. Resolve autonomous NPC interactions
@@ -243,6 +245,7 @@ class WorldStateManager:
           9. Process NPC movement (arrivals + new departures)
           10. Update NPC environment vectors from locations
           11. Apply per-tick vitality dynamics (energy drain/regen, health)
+          12. Apply per-tick social influence (peer pressure, decay)
 
         Args:
             delta_hours: In-game hours to advance.
@@ -263,10 +266,12 @@ class WorldStateManager:
             npcs_moved = 0
 
             if npcs:
-                # 3. Apply event impacts to emotions, health/energy + form memories
+                # 3. Apply event impacts to emotions, health/energy, social
+                #    + form memories
                 for event in due_events:
                     self._emotion_engine.apply_event_batch(npcs, event)
                     self._vitality_engine.apply_event_batch(npcs, event)
+                    self._social_engine.apply_event_batch(npcs, event)
                     for npc in npcs:
                         await self.form_memory_from_event(event, npc)
 
@@ -316,6 +321,9 @@ class WorldStateManager:
 
                 # 11. Apply per-tick vitality dynamics (drain, regen, health)
                 self._vitality_engine.tick(npcs)
+
+                # 12. Apply per-tick social influence (peer pressure, decay)
+                self._social_engine.tick(npcs)
 
             return TickResult(
                 game_time=self._game_time,

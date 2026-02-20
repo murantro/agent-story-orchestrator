@@ -51,3 +51,8 @@ INTERACTION_ENERGY_COST = 0.01  # Base energy cost per interaction
 CONFLICT_ENERGY_COST = 0.03  # Energy cost for conflict interactions
 CONFLICT_HEALTH_DAMAGE = 0.08  # Health damage from conflict interactions
 INTIMIDATION_HEALTH_DAMAGE = 0.03  # Health damage from intimidation
+
+# Social Influence Engine
+SOCIAL_BLEND_RATE = 0.08  # How fast NPC social vector blends toward peer signal
+SOCIAL_DECAY_RATE = 0.02  # Per-tick decay toward zero (without peer pressure)
+SOCIAL_EVENT_SCALE = 1.0  # Multiplier for event social_impact

@@ -14,6 +14,13 @@
 
 from .emotion_engine import EmotionEngine
 from .intention_engine import ArchetypeWeights, IntentionEngine
+from .social_engine import SocialInfluenceEngine
 from .vitality_engine import VitalityEngine
 
-__all__ = ["ArchetypeWeights", "EmotionEngine", "IntentionEngine", "VitalityEngine"]
+__all__ = [
+    "ArchetypeWeights",
+    "EmotionEngine",
+    "IntentionEngine",
+    "SocialInfluenceEngine",
+    "VitalityEngine",
+]
