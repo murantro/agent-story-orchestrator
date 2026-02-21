@@ -49,6 +49,7 @@ class NPCResponse(BaseModel):
     health: float
     importance: float
     location_id: str
+    activity: str = "idle"
 
 
 class NPCDetailResponse(NPCResponse):

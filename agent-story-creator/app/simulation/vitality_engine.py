@@ -90,9 +90,10 @@ class VitalityEngine:
     health_energy_cap_threshold: float = HEALTH_ENERGY_CAP_THRESHOLD
 
     def compute_energy_regen(self, npc: NPCVectorialStatus) -> float:
-        """Compute energy regeneration for an NPC based on environment.
+        """Compute energy regeneration for an NPC based on environment and activity.
 
         Safe, comfortable environments restore more energy.
+        Sleeping gives 3x boost, resting gives 2x boost.
 
         Args:
             npc: The NPC (not mutated).
@@ -103,7 +104,15 @@ class VitalityEngine:
         safety = float(npc.environment[_ENV_SAFETY])
         comfort = float(npc.environment[_ENV_WEATHER_COMFORT])
         env_factor = 0.5 * safety + 0.5 * comfort
-        return self.energy_regen_base * env_factor
+        base_regen = self.energy_regen_base * env_factor
+
+        # Activity multiplier: sleeping and resting boost recovery
+        if npc.activity == "sleeping":
+            base_regen *= 3.0
+        elif npc.activity == "resting":
+            base_regen *= 2.0
+
+        return base_regen
 
     def compute_health_change(self, npc: NPCVectorialStatus) -> float:
         """Compute net health change for an NPC based on environment.
@@ -124,9 +133,14 @@ class VitalityEngine:
             damage = self.danger_health_drain * (self.danger_safety_threshold - safety)
             change -= damage
 
-        # Passive healing (scaled by safety)
+        # Passive healing (scaled by safety, boosted by rest/sleep)
         if npc.health < 1.0:
-            change += self.health_regen_rate * safety
+            heal = self.health_regen_rate * safety
+            if npc.activity == "sleeping":
+                heal *= 2.0
+            elif npc.activity == "resting":
+                heal *= 1.5
+            change += heal
 
         return change
 

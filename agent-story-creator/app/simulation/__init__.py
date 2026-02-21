@@ -14,6 +14,7 @@
 
 from .emotion_engine import EmotionEngine
 from .intention_engine import ArchetypeWeights, IntentionEngine
+from .schedule_engine import ScheduleEngine
 from .social_engine import SocialInfluenceEngine
 from .vitality_engine import VitalityEngine
 
@@ -21,6 +22,7 @@ __all__ = [
     "ArchetypeWeights",
     "EmotionEngine",
     "IntentionEngine",
+    "ScheduleEngine",
     "SocialInfluenceEngine",
     "VitalityEngine",
 ]

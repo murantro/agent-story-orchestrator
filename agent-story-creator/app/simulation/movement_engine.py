@@ -174,6 +174,10 @@ class MovementEngine:
         if npc.energy < _MIN_ENERGY_TO_MOVE:
             return None
 
+        # Only leisure NPCs move freely; others stay put
+        if npc.activity != "leisure":
+            return None
+
         neighbors = graph.get_neighbors(npc.location_id)
         if not neighbors:
             return None

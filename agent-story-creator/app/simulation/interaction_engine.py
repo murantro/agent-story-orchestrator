@@ -260,6 +260,10 @@ class InteractionEngine:
         if npc_a.energy < self.min_energy or npc_b.energy < self.min_energy:
             return 0.0
 
+        # Activity gate: sleeping NPCs never interact
+        if npc_a.activity == "sleeping" or npc_b.activity == "sleeping":
+            return 0.0
+
         # Intention compatibility via compatibility matrix
         compat = float(npc_a.intention @ _COMPAT_MATRIX @ npc_b.intention)
         # Relationship bonus
@@ -268,6 +272,11 @@ class InteractionEngine:
         energy_factor = min(npc_a.energy, npc_b.energy)
         # Final probability
         prob = _sigmoid(compat + rel_bonus) * energy_factor * self.interaction_rate
+
+        # Resting NPCs interact with reduced probability
+        if npc_a.activity == "resting" or npc_b.activity == "resting":
+            prob *= 0.3
+
         return float(np.clip(prob, 0.0, 1.0))
 
     def resolve(
@@ -354,10 +363,10 @@ class InteractionEngine:
         Returns:
             List of interaction outcomes.
         """
-        # Group by location
+        # Group by location (exclude sleeping and low-energy NPCs)
         by_location: dict[str, list[NPCVectorialStatus]] = defaultdict(list)
         for npc in npcs:
-            if npc.energy >= self.min_energy:
+            if npc.energy >= self.min_energy and npc.activity != "sleeping":
                 by_location[npc.location_id].append(npc)
 
         outcomes: list[InteractionOutcome] = []

@@ -52,6 +52,7 @@ def serialize_npc(npc: NPCVectorialStatus) -> dict[str, Any]:
         "relationships": dict(npc.relationships),
         "recent_memories": list(npc.recent_memories),
         "location_id": npc.location_id,
+        "activity": npc.activity,
     }
 
 
@@ -79,6 +80,7 @@ def deserialize_npc(data: dict[str, Any]) -> NPCVectorialStatus:
         relationships=dict(data["relationships"]),
         recent_memories=list(data["recent_memories"]),
         location_id=data["location_id"],
+        activity=data.get("activity", "idle"),
     )
 
 

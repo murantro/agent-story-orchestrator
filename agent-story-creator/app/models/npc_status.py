@@ -111,6 +111,7 @@ class NPCVectorialStatus:
         relationships: Sparse dict of npc_id to affinity (-1 to 1).
         recent_memories: Last N significant event descriptions (plain text).
         location_id: Reference to a location entity.
+        activity: Current activity (sleeping, resting, working, leisure, idle).
     """
 
     npc_id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -141,6 +142,9 @@ class NPCVectorialStatus:
 
     # Location
     location_id: str = "default"
+
+    # Activity (set by ScheduleEngine each tick)
+    activity: str = "idle"
 
     def dominant_intention(self) -> str:
         """Return the label of the strongest intention dimension."""
@@ -189,5 +193,6 @@ class NPCVectorialStatus:
             f"Mood: {emot_str}\n"
             f"Personality: {pers_str}\n"
             f"Energy: {self.energy:.1f}, Health: {self.health:.1f}\n"
+            f"Activity: {self.activity}\n"
             f"Recent events: {memories_str}"
         )

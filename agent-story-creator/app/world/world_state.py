@@ -48,6 +48,7 @@ from app.simulation.intention_engine import IntentionEngine
 from app.simulation.interaction_engine import InteractionEngine
 from app.simulation.movement_engine import MovementEngine
 from app.simulation.relationship_engine import RelationshipEngine
+from app.simulation.schedule_engine import ScheduleEngine
 from app.simulation.social_engine import SocialInfluenceEngine
 from app.simulation.vitality_engine import VitalityEngine
 
@@ -105,6 +106,7 @@ class WorldStateManager:
         self._movement_engine = MovementEngine()
         self._vitality_engine = VitalityEngine()
         self._social_engine = SocialInfluenceEngine()
+        self._schedule_engine = ScheduleEngine()
         self._location_graph = LocationGraph()
         self._game_time = game_time
         self._max_npcs = max_npcs
@@ -235,17 +237,18 @@ class WorldStateManager:
 
         Runs the full pipeline:
           1. Advance clock
-          2. Deliver due events
-          3. Apply event impacts to emotions, health/energy, social + memories
-          4. Decay emotions toward baseline
-          5. Recompute intentions (biased by energy/health)
-          6. Resolve autonomous NPC interactions
-          7. Apply relationship updates, vitality costs + submit interaction events
-          8. Decay weak relationships
-          9. Process NPC movement (arrivals + new departures)
-          10. Update NPC environment vectors from locations
-          11. Apply per-tick vitality dynamics (energy drain/regen, health)
-          12. Apply per-tick social influence (peer pressure, decay)
+          2. Assign NPC activities from schedules (gates later steps)
+          3. Deliver due events
+          4. Apply event impacts to emotions, health/energy, social + memories
+          5. Decay emotions toward baseline
+          6. Recompute intentions (biased by energy/health)
+          7. Resolve autonomous NPC interactions (gated by activity)
+          8. Apply relationship updates, vitality costs + submit interaction events
+          9. Decay weak relationships
+          10. Process NPC movement (gated by activity)
+          11. Update NPC environment vectors from locations
+          12. Apply per-tick vitality dynamics (boosted by activity)
+          13. Apply per-tick social influence (peer pressure, decay)
 
         Args:
             delta_hours: In-game hours to advance.
@@ -266,7 +269,10 @@ class WorldStateManager:
             npcs_moved = 0
 
             if npcs:
-                # 3. Apply event impacts to emotions, health/energy, social
+                # 2. Assign NPC activities from schedules
+                self._schedule_engine.tick(npcs, self._game_time)
+
+                # 4. Apply event impacts to emotions, health/energy, social
                 #    + form memories
                 for event in due_events:
                     self._emotion_engine.apply_event_batch(npcs, event)
